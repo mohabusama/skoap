@@ -108,7 +108,6 @@ func Test(t *testing.T) {
 		backend := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			println("validating")
 			if r.URL.Path != testAuthPath {
 				w.WriteHeader(http.StatusNotFound)
 				return

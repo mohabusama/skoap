@@ -181,14 +181,12 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 }
 
 func (f *filter) Request(ctx filters.FilterContext) {
-	println("getting token")
 	token, err := getToken(ctx.Request())
 	if err != nil {
 		unauthorized(ctx)
 		return
 	}
 
-	println("calling validate")
 	uid, realm, err := f.authClient.validate(token)
 	if err != nil {
 		unauthorized(ctx)
