@@ -33,6 +33,7 @@ import (
 	"errors"
 	"github.com/zalando/skipper/filters"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -64,17 +65,18 @@ type (
 	}
 )
 
-var errMissingAuthHeader = errors.New("missing authorization header")
+var (
+	errInvalidAuthorizationHeader = errors.New("invalid authorization header")
+	errRequestFailed              = errors.New("request failed")
+)
 
 func getToken(r *http.Request) (string, error) {
 	h := r.Header.Get(authHeaderName)
-	h = strings.Trim(h, " ")
-	if h == "" {
-		return "", errMissingAuthHeader
+	if !strings.HasPrefix(h, "Bearer ") {
+		return "", errInvalidAuthorizationHeader
 	}
 
-	hs := strings.Split(h, " ")
-	return hs[len(hs)-1], nil
+	return h[7:], nil
 }
 
 func unauthorized(ctx filters.FilterContext) {
@@ -97,13 +99,17 @@ func jsonGet(url, auth string, doc interface{}) error {
 	}
 
 	defer rsp.Body.Close()
+	if rsp.StatusCode != 200 {
+		return errRequestFailed
+	}
+
 	d := json.NewDecoder(rsp.Body)
 	return d.Decode(doc)
 }
 
 func (ac *authClient) validate(token string) (string, string, error) {
 	var a authDoc
-	err := jsonGet(ac.urlBase+token, "", &a)
+	err := jsonGet(ac.urlBase+url.QueryEscape(token), "", &a)
 	return a.Uid, a.Realm, err
 }
 

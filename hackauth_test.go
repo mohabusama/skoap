@@ -7,6 +7,7 @@ import (
 	"github.com/zalando/skipper/proxy/proxytest"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -163,7 +164,7 @@ func Test(t *testing.T) {
 		}
 
 		if ti.hasAuth {
-			req.Header.Set(authHeaderName, ti.auth)
+			req.Header.Set(authHeaderName, "Bearer "+url.QueryEscape(ti.auth))
 		}
 
 		rsp, err := http.DefaultClient.Do(req)
