@@ -186,6 +186,10 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 
 }
 
+// TODO:
+// - remove the token
+// - check scopes
+
 func (f *filter) Request(ctx filters.FilterContext) {
 	token, err := getToken(ctx.Request())
 	if err != nil {
