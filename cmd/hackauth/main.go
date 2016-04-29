@@ -2,30 +2,30 @@ package main
 
 import (
 	"flag"
-	"github.com/zalando/skipper/eskip"
+	"fmt"
+	"github.bus.zalan.do/aryszka/hackauth"
 	"github.com/zalando/skipper"
+	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/proxy"
 	"github.com/zalando/skipper/routing"
-	"github.bus.zalan.do/aryszka/hackauth"
 	"log"
-	"strings"
-	"fmt"
 	"os"
+	"strings"
 )
 
 const (
-	addressFlag = "address"
+	addressFlag       = "address"
 	targetAddressFlag = "target-address"
-	realmFlag = "realm"
-	teamsFlag = "teams"
-	routesFileFlag = "routes-file"
-	insecureFlag = "insecure"
+	realmFlag         = "realm"
+	teamsFlag         = "teams"
+	routesFileFlag    = "routes-file"
+	insecureFlag      = "insecure"
 
-	authUrlBaseFlag = "auth-url"
+	authUrlBaseFlag    = "auth-url"
 	defaultAuthUrlBase = "http://[::1]:9081?access_token="
 
-	teamUrlBaseFlag = "team-url"
+	teamUrlBaseFlag    = "team-url"
 	defaultTeamUrlBase = "http://[::1]:9082"
 )
 
@@ -69,14 +69,14 @@ be appended`
 type singleRouteClient eskip.Route
 
 var (
-	address string
+	address       string
 	targetAddress string
-	realm string
-	teams string
-	routesFile string
-	insecure bool
-	authUrlBase string
-	teamUrlBase string
+	realm         string
+	teams         string
+	routesFile    string
+	insecure      bool
+	authUrlBase   string
+	teamUrlBase   string
 )
 
 func (src *singleRouteClient) LoadAll() ([]*eskip.Route, error) {
@@ -128,8 +128,8 @@ func main() {
 	}
 
 	o := skipper.Options{
-		Address: address,
-		CustomFilters: []filters.Spec{hackauth.New(authUrlBase, teamUrlBase)},
+		Address:           address,
+		CustomFilters:     []filters.Spec{hackauth.New(authUrlBase, teamUrlBase)},
 		AccessLogDisabled: true}
 
 	if insecure {
