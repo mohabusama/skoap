@@ -39,13 +39,21 @@ import (
 
 const authHeaderName = "Authorization"
 
+type roleCheckType int
+
+const (
+	checkScope roleCheckType = iota
+	checkTeam
+)
+
 type (
 	authClient struct{ urlBase string }
 	teamClient struct{ urlBase string }
 
 	authDoc struct {
-		Uid   string `json:"uid"`
-		Realm string `json:"realm"`
+		Uid    string   `json:"uid"`
+		Realm  string   `json:"realm"`
+		Scopes []string `json:"scope"` // TODO: verify this with service2service authentication
 	}
 
 	teamDoc struct {
@@ -53,13 +61,16 @@ type (
 	}
 
 	spec struct {
+		typ        roleCheckType
 		authClient *authClient
 		teamClient *teamClient
 	}
 
 	filter struct {
+		typ        roleCheckType
 		authClient *authClient
 		teamClient *teamClient
+		scopes     []string
 		realm      string
 		teams      []string
 	}
@@ -107,10 +118,10 @@ func jsonGet(url, auth string, doc interface{}) error {
 	return d.Decode(doc)
 }
 
-func (ac *authClient) validate(token string) (string, string, error) {
+func (ac *authClient) validate(token string) (*authDoc, error) {
 	var a authDoc
 	err := jsonGet(ac.urlBase+url.QueryEscape(token), "", &a)
-	return a.Uid, a.Realm, err
+	return &a, err
 }
 
 func (tc *teamClient) getTeams(uid, token string) ([]string, error) {
@@ -126,6 +137,15 @@ func (tc *teamClient) getTeams(uid, token string) ([]string, error) {
 	}
 
 	return ts, nil
+}
+
+func newSpec(typ roleCheckType, authUrlBase, teamUrlBase string) filters.Spec {
+	s := &spec{typ: typ, authClient: &authClient{authUrlBase}}
+	if typ == checkTeam {
+		s.teamClient = &teamClient{teamUrlBase}
+	}
+
+	return s
 }
 
 // Creates a new hackauth specification. It accepts two
@@ -148,70 +168,78 @@ func (tc *teamClient) getTeams(uid, token string) ([]string, error) {
 //                document's items). The user id of the user
 //                is appended at the end of the url.
 //
-func New(authUrlBase, teamUrlBase string) filters.Spec {
-	ac := &authClient{authUrlBase}
-	tc := &teamClient{teamUrlBase}
-	return &spec{ac, tc}
+func New(authUrlBase string) filters.Spec {
+	return newSpec(checkScope, authUrlBase, "")
+}
+
+func NewTeamCheck(authUrlBase, teamUrlBase string) filters.Spec {
+	return newSpec(checkTeam, authUrlBase, teamUrlBase)
 }
 
 func (s *spec) Name() string { return "hackauth" }
 
-func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
-	var (
-		realm string
-		teams []string
-	)
-
-	if len(args) > 0 {
-		var ok bool
-		realm, ok = args[0].(string)
+func getStrings(args []interface{}) ([]string, error) {
+	s := make([]string, len(args))
+	var ok bool
+	for i, a := range args {
+		s[i], ok = a.(string)
 		if !ok {
 			return nil, filters.ErrInvalidFilterParameters
 		}
+	}
 
-		for _, t := range args[1:] {
-			if ts, ok := t.(string); ok {
-				teams = append(teams, ts)
-			} else {
-				return nil, filters.ErrInvalidFilterParameters
+	return s, nil
+}
+
+func intersect(left, right []string) bool {
+	for _, l := range left {
+		for _, r := range right {
+			if l == r {
+				return true
 			}
 		}
 	}
 
-	return &filter{
-		authClient: s.authClient,
-		teamClient: s.teamClient,
-		realm:      realm,
-		teams:      teams}, nil
+	return false
+}
+
+func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
+	sargs, err := getStrings(args)
+	if err != nil {
+		return nil, err
+	}
+
+	f := &filter{typ: s.typ, authClient: s.authClient, teamClient: s.teamClient}
+	if s.typ == checkScope {
+		f.scopes = sargs
+		return f, nil
+	}
+
+	if len(sargs) > 0 {
+		f.realm = sargs[0]
+		f.teams = sargs[1:]
+	}
+
+	return f, nil
 
 }
 
-// TODO:
-// - remove the token
-// - check scopes
-
-func (f *filter) Request(ctx filters.FilterContext) {
-	r := ctx.Request()
-
-	token, err := getToken(r)
-	if err != nil {
-		unauthorized(ctx)
+func (f *filter) validateScope(ctx filters.FilterContext, a *authDoc) {
+	if len(f.scopes) == 0 {
 		return
 	}
 
-	r.Header.Del(authHeaderName)
-
-	uid, realm, err := f.authClient.validate(token)
-	if err != nil {
+	if !intersect(f.scopes, a.Scopes) {
 		unauthorized(ctx)
-		return
 	}
+}
 
+func (f *filter) validateTeam(ctx filters.FilterContext, token string, a *authDoc) {
 	if f.realm == "" {
 		return
 	}
 
-	if realm != f.realm {
+	if a.Realm != f.realm {
 		unauthorized(ctx)
 		return
 	}
@@ -220,7 +248,7 @@ func (f *filter) Request(ctx filters.FilterContext) {
 		return
 	}
 
-	teams, err := f.teamClient.getTeams(uid, token)
+	teams, err := f.teamClient.getTeams(a.Uid, token)
 	if err != nil {
 		unauthorized(ctx)
 		return
@@ -234,7 +262,33 @@ func (f *filter) Request(ctx filters.FilterContext) {
 		}
 	}
 
-	unauthorized(ctx)
+	if !intersect(f.teams, teams) {
+		unauthorized(ctx)
+	}
+}
+
+func (f *filter) Request(ctx filters.FilterContext) {
+	r := ctx.Request()
+
+	token, err := getToken(r)
+	if err != nil {
+		unauthorized(ctx)
+		return
+	}
+
+	r.Header.Del(authHeaderName)
+
+	a, err := f.authClient.validate(token)
+	if err != nil {
+		unauthorized(ctx)
+		return
+	}
+
+	if f.typ == checkScope {
+		f.validateScope(ctx, a)
+	} else {
+		f.validateTeam(ctx, token, a)
+	}
 }
 
 func (f *filter) Response(_ filters.FilterContext) {}

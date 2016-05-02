@@ -15,6 +15,7 @@ import (
 const (
 	testToken    = "test-token"
 	testUid      = "jdoe"
+	testScope    = "test-scope"
 	testRealm    = "/immortals"
 	testTeam     = "test-team"
 	testAuthPath = "/test-auth"
@@ -45,6 +46,7 @@ func lastQueryValue(url string) string {
 func Test(t *testing.T) {
 	for _, ti := range []struct {
 		msg         string
+		typ         roleCheckType
 		authBaseUrl string
 		teamBaseUrl string
 		args        []interface{}
@@ -52,22 +54,65 @@ func Test(t *testing.T) {
 		auth        string
 		statusCode  int
 	}{{
-		msg:        "uninitialized filter, no authorization header",
+		msg:        "uninitialized filter, no authorization header, scope check",
+		typ:        checkScope,
 		statusCode: http.StatusUnauthorized,
 	}, {
-		msg:         "no authorization header",
+		msg:        "uninitialized filter, no authorization header, team check",
+		typ:        checkTeam,
+		statusCode: http.StatusUnauthorized,
+	}, {
+		msg:         "no authorization header, scope check",
+		typ:         checkScope,
+		authBaseUrl: testAuthPath,
+		statusCode:  http.StatusUnauthorized,
+	}, {
+		msg:         "invalid token, scope check",
+		typ:         checkScope,
+		authBaseUrl: testAuthPath + "?access_token=",
+		hasAuth:     true,
+		auth:        "invalid-token",
+		statusCode:  http.StatusUnauthorized,
+	}, {
+		msg:         "valid token, auth only, scope check",
+		typ:         checkScope,
+		authBaseUrl: testAuthPath + "?access_token=",
+		hasAuth:     true,
+		auth:        testToken,
+		statusCode:  http.StatusOK,
+	}, {
+		msg:         "invalid scope",
+		typ:         checkScope,
+		authBaseUrl: testAuthPath + "?access_token=",
+		args:        []interface{}{"not-matching-scope"},
+		hasAuth:     true,
+		auth:        testToken,
+		statusCode:  http.StatusUnauthorized,
+	}, {
+		msg:         "valid token, valid scope",
+		typ:         checkScope,
+		authBaseUrl: testAuthPath + "?access_token=",
+		args:        []interface{}{testScope, "other-scope"},
+		hasAuth:     true,
+		auth:        testToken,
+		statusCode:  http.StatusOK,
+	}, {
+		msg:         "no authorization header, team check",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath,
 		teamBaseUrl: testTeamPath,
 		statusCode:  http.StatusUnauthorized,
 	}, {
-		msg:         "invalid token",
+		msg:         "invalid token, team check",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		hasAuth:     true,
 		auth:        "invalid-token",
 		statusCode:  http.StatusUnauthorized,
 	}, {
-		msg:         "valid token, auth only",
+		msg:         "valid token, auth only, team check",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		hasAuth:     true,
@@ -75,6 +120,7 @@ func Test(t *testing.T) {
 		statusCode:  http.StatusOK,
 	}, {
 		msg:         "invalid realm",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		args:        []interface{}{"/not-matching-realm"},
@@ -83,6 +129,7 @@ func Test(t *testing.T) {
 		statusCode:  http.StatusUnauthorized,
 	}, {
 		msg:         "valid token, valid realm, no team check",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		args:        []interface{}{testRealm},
@@ -91,6 +138,7 @@ func Test(t *testing.T) {
 		statusCode:  http.StatusOK,
 	}, {
 		msg:         "valid token, valid realm, no matching team",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		args:        []interface{}{testRealm, "invalid-team-0", "invalid-team-1"},
@@ -98,7 +146,8 @@ func Test(t *testing.T) {
 		auth:        testToken,
 		statusCode:  http.StatusUnauthorized,
 	}, {
-		msg:         "valid token, valid realm, matching team",
+		msg:         "valid token, valid realm, matching team, team",
+		typ:         checkTeam,
 		authBaseUrl: testAuthPath + "?access_token=",
 		teamBaseUrl: testTeamPath + "?member=",
 		args:        []interface{}{testRealm, "invalid-team-0", testTeam},
@@ -123,7 +172,7 @@ func Test(t *testing.T) {
 				return
 			}
 
-			d := testAuthDoc{authDoc{testUid, testRealm}, "noise"}
+			d := testAuthDoc{authDoc{testUid, testRealm, []string{testScope}}, "noise"}
 			e := json.NewEncoder(w)
 			err := e.Encode(&d)
 			if err != nil {
@@ -155,7 +204,12 @@ func Test(t *testing.T) {
 			}
 		}))
 
-		s := New(authServer.URL+ti.authBaseUrl, teamServer.URL+ti.teamBaseUrl)
+		var s filters.Spec
+		if ti.typ == checkScope {
+			s = New(authServer.URL + ti.authBaseUrl)
+		} else {
+			s = NewTeamCheck(authServer.URL+ti.authBaseUrl, teamServer.URL+ti.teamBaseUrl)
+		}
 		fr := make(filters.Registry)
 		fr.Register(s)
 		r := &eskip.Route{Filters: []*eskip.Filter{{Name: s.Name(), Args: ti.args}}, Backend: backend.URL}

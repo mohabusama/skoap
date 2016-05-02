@@ -128,8 +128,10 @@ func main() {
 	}
 
 	o := skipper.Options{
-		Address:           address,
-		CustomFilters:     []filters.Spec{hackauth.New(authUrlBase, teamUrlBase)},
+		Address: address,
+		CustomFilters: []filters.Spec{
+			hackauth.New(authUrlBase),
+			hackauth.NewTeamCheck(authUrlBase, teamUrlBase)},
 		AccessLogDisabled: true}
 
 	if insecure {
