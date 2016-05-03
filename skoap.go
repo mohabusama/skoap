@@ -1,6 +1,13 @@
 /*
-Package hackauth implements an authentication filter for Zalando
-installations of Skipper.
+Package skoap implements an authentication filters for Skipper.
+
+The package contains two filters: auth and authTeam.
+
+The auth filter takes the Authorization header from the request,
+assuming that it is an OAuth2 Bearer token, and validates it
+against the configured token validation endpoint.
+
+If the OAuth2 realm is set for the
 
 The filter takes the Authorization header from the request, and
 validates it against the configured token validation endpoint.
@@ -32,6 +39,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/zalando/skipper/filters"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -96,6 +104,31 @@ func getToken(r *http.Request) (string, error) {
 
 func unauthorized(ctx filters.FilterContext) {
 	ctx.Serve(&http.Response{StatusCode: http.StatusUnauthorized})
+}
+
+func getStrings(args []interface{}) ([]string, error) {
+	s := make([]string, len(args))
+	var ok bool
+	for i, a := range args {
+		s[i], ok = a.(string)
+		if !ok {
+			return nil, filters.ErrInvalidFilterParameters
+		}
+	}
+
+	return s, nil
+}
+
+func intersect(left, right []string) bool {
+	for _, l := range left {
+		for _, r := range right {
+			if l == r {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func jsonGet(url, auth string, doc interface{}) error {
@@ -188,31 +221,6 @@ func (s *spec) Name() string {
 	}
 }
 
-func getStrings(args []interface{}) ([]string, error) {
-	s := make([]string, len(args))
-	var ok bool
-	for i, a := range args {
-		s[i], ok = a.(string)
-		if !ok {
-			return nil, filters.ErrInvalidFilterParameters
-		}
-	}
-
-	return s, nil
-}
-
-func intersect(left, right []string) bool {
-	for _, l := range left {
-		for _, r := range right {
-			if l == r {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	sargs, err := getStrings(args)
 	if err != nil {
@@ -228,30 +236,29 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 
 }
 
-func (f *filter) validateScope(ctx filters.FilterContext, a *authDoc) {
-	if len(f.args) == 0 {
-		return
+func (f *filter) validateRealm(a *authDoc) bool {
+	if f.realm == "" {
+		return true
 	}
 
-	if !intersect(f.args, a.Scopes) {
-		unauthorized(ctx)
-	}
+	return a.Realm == f.realm
 }
 
-func (f *filter) validateTeam(ctx filters.FilterContext, token string, a *authDoc) {
+func (f *filter) validateScope(a *authDoc) bool {
 	if len(f.args) == 0 {
-		return
+		return true
+	}
+
+	return intersect(f.args, a.Scopes)
+}
+
+func (f *filter) validateTeam(token string, a *authDoc) (bool, error) {
+	if len(f.args) == 0 {
+		return true, nil
 	}
 
 	teams, err := f.teamClient.getTeams(a.Uid, token)
-	if err != nil {
-		unauthorized(ctx)
-		return
-	}
-
-	if !intersect(f.args, teams) {
-		unauthorized(ctx)
-	}
+	return intersect(f.args, teams), err
 }
 
 func (f *filter) Request(ctx filters.FilterContext) {
@@ -268,22 +275,32 @@ func (f *filter) Request(ctx filters.FilterContext) {
 	a, err := f.authClient.validate(token)
 	if err != nil {
 		unauthorized(ctx)
+		log.Println(err)
 		return
 	}
 
-	if f.realm == "" {
-		return
-	}
-
-	if a.Realm != f.realm {
+	if !f.validateRealm(a) {
 		unauthorized(ctx)
 		return
 	}
 
 	if f.typ == checkScope {
-		f.validateScope(ctx, a)
-	} else {
-		f.validateTeam(ctx, token, a)
+		if !f.validateScope(a) {
+			unauthorized(ctx)
+		}
+
+		return
+	}
+
+	valid, err := f.validateTeam(token, a)
+	if err != nil {
+		unauthorized(ctx)
+		log.Println(err)
+		return
+	}
+
+	if !valid {
+		unauthorized(ctx)
 	}
 }
 
