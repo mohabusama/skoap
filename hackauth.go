@@ -70,9 +70,8 @@ type (
 		typ        roleCheckType
 		authClient *authClient
 		teamClient *teamClient
-		scopes     []string
 		realm      string
-		teams      []string
+		args       []string
 	}
 )
 
@@ -210,14 +209,8 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	}
 
 	f := &filter{typ: s.typ, authClient: s.authClient, teamClient: s.teamClient}
-	if s.typ == checkScope {
-		f.scopes = sargs
-		return f, nil
-	}
-
 	if len(sargs) > 0 {
-		f.realm = sargs[0]
-		f.teams = sargs[1:]
+		f.realm, f.args = sargs[0], sargs[1:]
 	}
 
 	return f, nil
@@ -225,26 +218,17 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 }
 
 func (f *filter) validateScope(ctx filters.FilterContext, a *authDoc) {
-	if len(f.scopes) == 0 {
+	if len(f.args) == 0 {
 		return
 	}
 
-	if !intersect(f.scopes, a.Scopes) {
+	if !intersect(f.args, a.Scopes) {
 		unauthorized(ctx)
 	}
 }
 
 func (f *filter) validateTeam(ctx filters.FilterContext, token string, a *authDoc) {
-	if f.realm == "" {
-		return
-	}
-
-	if a.Realm != f.realm {
-		unauthorized(ctx)
-		return
-	}
-
-	if len(f.teams) == 0 {
+	if len(f.args) == 0 {
 		return
 	}
 
@@ -254,15 +238,7 @@ func (f *filter) validateTeam(ctx filters.FilterContext, token string, a *authDo
 		return
 	}
 
-	for _, t := range teams {
-		for _, et := range f.teams {
-			if t == et {
-				return
-			}
-		}
-	}
-
-	if !intersect(f.teams, teams) {
+	if !intersect(f.args, teams) {
 		unauthorized(ctx)
 	}
 }
@@ -280,6 +256,15 @@ func (f *filter) Request(ctx filters.FilterContext) {
 
 	a, err := f.authClient.validate(token)
 	if err != nil {
+		unauthorized(ctx)
+		return
+	}
+
+	if f.realm == "" {
+		return
+	}
+
+	if a.Realm != f.realm {
 		unauthorized(ctx)
 		return
 	}
