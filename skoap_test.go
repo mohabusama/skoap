@@ -176,14 +176,15 @@ func Test(t *testing.T) {
 				return
 			}
 
-			if lastQueryValue(r.URL.String()) != testToken {
+			token, err := getToken(r)
+			if err != nil || token != testToken {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 
 			d := testAuthDoc{authDoc{testUid, testRealm, []string{testScope}}, "noise"}
 			e := json.NewEncoder(w)
-			err := e.Encode(&d)
+			err = e.Encode(&d)
 			if err != nil {
 				t.Error(ti.msg, err)
 			}

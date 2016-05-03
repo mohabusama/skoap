@@ -68,7 +68,7 @@ https://godoc.org/github.com/zalando/skipper/eskip`
 
 	authUrlBaseUsage = `URL base of the authentication service. The authentication token found
 in the incoming requests will appended to this url. Example:
-https://info.services.auth.zalando.com/oauth2/tokeninfo?access_token=`
+https://info.services.auth.zalando.com/oauth2/tokeninfo`
 
 	teamUrlBaseUsage = `URL base of the team service. The user id received from the authentication service will
 be appended`

@@ -41,7 +41,6 @@ import (
 	"github.com/zalando/skipper/filters"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -94,12 +93,13 @@ var (
 )
 
 func getToken(r *http.Request) (string, error) {
+	const b = "Bearer "
 	h := r.Header.Get(authHeaderName)
-	if !strings.HasPrefix(h, "Bearer ") {
+	if !strings.HasPrefix(h, b) {
 		return "", errInvalidAuthorizationHeader
 	}
 
-	return h[7:], nil
+	return h[len(b):], nil
 }
 
 func unauthorized(ctx filters.FilterContext) {
@@ -157,7 +157,7 @@ func jsonGet(url, auth string, doc interface{}) error {
 
 func (ac *authClient) validate(token string) (*authDoc, error) {
 	var a authDoc
-	err := jsonGet(ac.urlBase+url.QueryEscape(token), "", &a)
+	err := jsonGet(ac.urlBase, token, &a)
 	return &a, err
 }
 
