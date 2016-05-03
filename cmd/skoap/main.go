@@ -150,7 +150,9 @@ func main() {
 		o.ProxyOptions |= proxy.OptionsInsecure
 	}
 
-	if targetAddress != "" {
+	if targetAddress == "" {
+		o.RoutesFile = routesFile
+	} else {
 		var filterArgs []interface{}
 		if realm != "" {
 			filterArgs = append(filterArgs, realm)
@@ -165,7 +167,9 @@ func main() {
 
 		if args != "" {
 			// realm set to empty
-			filterArgs = append(filterArgs, "")
+			if realm == "" {
+				filterArgs = append(filterArgs, "")
+			}
 
 			argss := strings.Split(args, ",")
 			for _, a := range argss {
@@ -179,8 +183,6 @@ func main() {
 					Name: name,
 					Args: filterArgs}},
 				Backend: targetAddress}}
-	} else {
-		o.RoutesFile = routesFile
 	}
 
 	log.Fatal(skipper.Run(o))
