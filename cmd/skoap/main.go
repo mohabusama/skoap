@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.bus.zalan.do/aryszka/hackauth"
+	"github.bus.zalan.do/aryszka/skoap"
 	"github.com/zalando/skipper"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
@@ -17,7 +17,9 @@ import (
 const (
 	addressFlag       = "address"
 	targetAddressFlag = "target-address"
+	useTeamCheckFlag  = "team-check"
 	realmFlag         = "realm"
+	scopesFlag        = "scopes"
 	teamsFlag         = "teams"
 	routesFileFlag    = "routes-file"
 	insecureFlag      = "insecure"
@@ -31,10 +33,11 @@ const (
 
 const (
 	usageHeader = `
-hackauth - Hacky reverse proxy verifying authorization tokens.
+skoap - Skipper based reverse proxy with authentication.
 
-Use hackauth to verify authorization tokens before forwarding requests, and optionally check OAuth realms and
-team membership.
+Use skoap to verify authorization tokens before forwarding requests, and optionally check OAuth realms and
+team membership. In addition to check incoming requests, optionally set basic authorzation headers for
+outgoing requests.
 
 `
 
@@ -43,9 +46,14 @@ team membership.
 	targetAddressUsage = `when authenticating to a single network endpoint, set its address (without path) as
 the -target-address`
 
+	useTeamCheckUsage = `when this flag set, skoap checks teams instead of oauth2 scopes for authorization`
+
 	realmUsage = `when target address is used to specify the target endpoint, and requests need to be
 authenticated against an OAuth realm, set the value of the realm with the flag. Note, that in case of a routes
 file is used, the realm can be set for each hackauth filter reference individually`
+
+	scopesUsage = `a comma separated list of the oauth2 scopes to be checked in addition to the token validation
+and the realm check`
 
 	teamsUsage = `when target address is used to specify the target endpoint, and requests need to be
 authenticated against one or more teams ('or' relation), set the value of the teams with the flag, as a comma
@@ -71,7 +79,9 @@ type singleRouteClient eskip.Route
 var (
 	address       string
 	targetAddress string
+	useTeamCheck  bool
 	realm         string
+	scopes        string
 	teams         string
 	routesFile    string
 	insecure      bool
@@ -95,7 +105,9 @@ func init() {
 
 	flag.StringVar(&address, addressFlag, "", addressUsage)
 	flag.StringVar(&targetAddress, targetAddressFlag, "", targetAddressUsage)
+	flag.BoolVar(&useTeamCheck, useTeamCheckFlag, false, useTeamCheckUsage)
 	flag.StringVar(&realm, realmFlag, "", realmUsage)
+	flag.StringVar(&scopes, scopesFlag, "", scopesUsage)
 	flag.StringVar(&teams, teamsFlag, "", teamsUsage)
 	flag.StringVar(&routesFile, routesFileFlag, "", routesFileUsage)
 	flag.BoolVar(&insecure, insecureFlag, false, insecureUsage)
@@ -119,8 +131,12 @@ func main() {
 		logUsage("cannot set both the target address and a routes file")
 	}
 
-	if routesFile != "" && (realm != "" || teams != "") {
-		logUsage("the realm and teams flags can be used only together with the target-address flag")
+	if targetAddress == "" && (useTeamCheck || realm != "" || scopes != "" || teams != "") {
+		logUsage("the team-check, realm, scopes and teams flags can be used only together with the target-address flag")
+	}
+
+	if useTeamCheck && scopes != "" {
+		logUsage("the scopes flag can be used only without the team-check flag")
 	}
 
 	if realm == "" && teams != "" {
@@ -130,8 +146,8 @@ func main() {
 	o := skipper.Options{
 		Address: address,
 		CustomFilters: []filters.Spec{
-			hackauth.New(authUrlBase),
-			hackauth.NewTeamCheck(authUrlBase, teamUrlBase)},
+			skoap.New(authUrlBase),
+			skoap.NewTeamCheck(authUrlBase, teamUrlBase)},
 		AccessLogDisabled: true}
 
 	if insecure {
@@ -139,19 +155,23 @@ func main() {
 	}
 
 	if targetAddress != "" {
-		var filterArgs []interface{}
-		if realm != "" {
-			filterArgs = append(filterArgs, realm)
-			if teams != "" {
-				ts := strings.Split(teams, ",")
-				filterArgs = append(filterArgs, ts)
-			}
+		filterArgs := []interface{}{realm}
+		args := scopes
+		name := skoap.AuthName
+		if useTeamCheck {
+			args = teams
+			name = skoap.AuthTeamName
+		}
+
+		argss := strings.Split(args, ",")
+		for _, a := range argss {
+			filterArgs = append(filterArgs, a)
 		}
 
 		o.CustomDataClients = []routing.DataClient{
 			&singleRouteClient{
 				Filters: []*eskip.Filter{{
-					Name: "hackauth",
+					Name: name,
 					Args: filterArgs}},
 				Backend: targetAddress}}
 	} else {

@@ -26,7 +26,7 @@ the filter also checks if the user is a member of that realm. If teams
 are provided, the filter checks in addition, if the user is a member of
 at least one of the listed teams.
 */
-package hackauth
+package skoap
 
 import (
 	"encoding/json"
@@ -44,6 +44,11 @@ type roleCheckType int
 const (
 	checkScope roleCheckType = iota
 	checkTeam
+)
+
+const (
+	AuthName     = "auth"
+	AuthTeamName = "authTeam"
 )
 
 type (
@@ -175,7 +180,13 @@ func NewTeamCheck(authUrlBase, teamUrlBase string) filters.Spec {
 	return newSpec(checkTeam, authUrlBase, teamUrlBase)
 }
 
-func (s *spec) Name() string { return "hackauth" }
+func (s *spec) Name() string {
+	if s.typ == checkScope {
+		return AuthName
+	} else {
+		return AuthTeamName
+	}
+}
 
 func getStrings(args []interface{}) ([]string, error) {
 	s := make([]string, len(args))

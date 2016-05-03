@@ -1,4 +1,4 @@
-package hackauth
+package skoap
 
 import (
 	"encoding/json"
