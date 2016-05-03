@@ -139,10 +139,6 @@ func main() {
 		logUsage("the scopes flag can be used only without the team-check flag")
 	}
 
-	if realm == "" && teams != "" {
-		logUsage("the teams flag can be used only when a realm is specified")
-	}
-
 	o := skipper.Options{
 		Address: address,
 		CustomFilters: []filters.Spec{
@@ -155,7 +151,11 @@ func main() {
 	}
 
 	if targetAddress != "" {
-		filterArgs := []interface{}{realm}
+		var filterArgs []interface{}
+		if realm != "" {
+			filterArgs = append(filterArgs, realm)
+		}
+
 		args := scopes
 		name := skoap.AuthName
 		if useTeamCheck {
@@ -163,9 +163,14 @@ func main() {
 			name = skoap.AuthTeamName
 		}
 
-		argss := strings.Split(args, ",")
-		for _, a := range argss {
-			filterArgs = append(filterArgs, a)
+		if args != "" {
+			// realm set to empty
+			filterArgs = append(filterArgs, "")
+
+			argss := strings.Split(args, ",")
+			for _, a := range argss {
+				filterArgs = append(filterArgs, a)
+			}
 		}
 
 		o.CustomDataClients = []routing.DataClient{
