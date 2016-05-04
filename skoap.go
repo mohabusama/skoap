@@ -1,37 +1,59 @@
 /*
 Package skoap implements an authentication filters for Skipper.
 
+This package provides a Skipper extension, for details of using
+it, please see the Skipper documentation:
+
+https://godoc.org/github.com/zalando/skipper
+
 The package contains two filters: auth and authTeam.
 
 The auth filter takes the Authorization header from the request,
 assuming that it is an OAuth2 Bearer token, and validates it
-against the configured token validation endpoint.
+against the configured token validation service.
 
-If the OAuth2 realm is set for the
+If the OAuth2 realm is set for the filter, then it checks if the
+user of the token belongs to that realm.
 
-The filter takes the Authorization header from the request, and
-validates it against the configured token validation endpoint.
+If OAuth2 scopes are set for the filter, then it checks if the
+user of the token has at least one of the configured scopes assigned.
 
-Since the available authentication solution doesn't support checking
-for security roles of the users, this filter can only check whether
-the user is:
+The authTeam filter works exactly the same as the auth filter, but
+instead of scopes, it checks if the user is a member of a team. To
+get the teams of the user, the filter makes an additional request,
+with the available authorization token, to a configured team API
+endpoint.
 
-- authenticated at all
+To check only the scopes or the teams, the first argument of the
+filter needs to be set to empty, "".
 
-- member of a realm
+Examples:
 
-- member of a team
+Check only if the request has a valid authentication token:
 
-For checking whether the user is a member of a team, the filter uses a
-separate service endpoint: the 'team service'.
+	* -> auth() -> "https://www.example.org"
 
-The hackauth filter accepts an arbitrary number of string arguments,
-where the first argument is the expected 'realm', and the rest of the
-arguments is a list of team ids. If no arguments are provided, the
-filter only checks if the auth token is valid. If the realm is provided,
-the filter also checks if the user is a member of that realm. If teams
-are provided, the filter checks in addition, if the user is a member of
-at least one of the listed teams.
+Check if the request has a valid authentication token and the user
+of the token belongs to a realm:
+
+	* -> auth("/employess") -> "https://www.example.org"
+
+Check if the request has a valid authentication token, the user of
+the token belongs to a realm and has one of the specified scopes
+assigned:
+
+	* -> auth("/employees", "read-zmon") -> "https://www.example.org"
+
+Check if the request has a valid authentication token, the user of
+the token belongs to a realm and belongs to one of the specified teams:
+
+	* -> authTeam("/employees", "b-team") -> "https://www.example.org"
+
+Check if the request has a valid authentication token, and the user
+has one of the specified scopes assigned regardless of the realm they
+belong to:
+
+	* -> auth("", "uid") -> "https://www.example.org"
 */
 package skoap
 
@@ -185,34 +207,39 @@ func newSpec(typ roleCheckType, authUrlBase, teamUrlBase string) filters.Spec {
 	return s
 }
 
-// Creates a new hackauth specification. It accepts two
-// arguments:
+// Creates a new auth filter specification to validate authorization
+// tokens, optionally check realms and optionally check scopes.
 //
 // - authUrlBase: the url of the token validation service.
-//                The filter expects the service to validate
-//                the token found in the Authorization header
-//                and in case of a valid token, it expects it
-//                to return the user id and the realm of the
-//                user associated with the token ('uid' and
-//                'realm' fields in the returned json
-//                document). The token is appended at the end
-//                of the url.
-//
-// - teamUrlBase: when team restriction is specified for a
-//                filter instance, this service is queried
-//                for the team ids, that the user is a member
-//                of ('id' field of the returned json
-//                document's items). The user id of the user
-//                is appended at the end of the url.
+// The filter expects the service to validate the token found in the
+// Authorization header and in case of a valid token, it expects it
+// to return the user id and the realm of the user associated with
+// the token ('uid' and 'realm' fields in the returned json document).
+// The token is set as the Authorization Bearer header.
 //
 func New(authUrlBase string) filters.Spec {
 	return newSpec(checkScope, authUrlBase, "")
 }
 
+// Creates a new auth filter specification to validate authorization
+// tokens, optionally check realms and optionally check teams.
+//
+// - authUrlBase: the url of the token validation service. The filter
+// expects the service to validate the token found in the Authorization
+// header and in case of a valid token, it expects it to return the
+// user id and the realm of the user associated with the token ('uid'
+// and 'realm' fields in the returned json document). The token is set
+// as the Authorization Bearer header.
+//
+// - teamUrlBase: this service is queried for the team ids, that the
+// user is a member of ('id' field of the returned json document's
+// items). The user id of the user is appended at the end of the url.
+//
 func NewTeamCheck(authUrlBase, teamUrlBase string) filters.Spec {
 	return newSpec(checkTeam, authUrlBase, teamUrlBase)
 }
 
+// filters.Spec implementation
 func (s *spec) Name() string {
 	if s.typ == checkScope {
 		return AuthName
@@ -221,6 +248,7 @@ func (s *spec) Name() string {
 	}
 }
 
+// filters.Spec implementation
 func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	sargs, err := getStrings(args)
 	if err != nil {
@@ -261,6 +289,7 @@ func (f *filter) validateTeam(token string, a *authDoc) (bool, error) {
 	return intersect(f.args, teams), err
 }
 
+// filters.Filter implementation
 func (f *filter) Request(ctx filters.FilterContext) {
 	r := ctx.Request()
 
@@ -304,4 +333,5 @@ func (f *filter) Request(ctx filters.FilterContext) {
 	}
 }
 
+// filters.Filter implementation
 func (f *filter) Response(_ filters.FilterContext) {}
