@@ -125,6 +125,7 @@ func getToken(r *http.Request) (string, error) {
 }
 
 func unauthorized(ctx filters.FilterContext) {
+	log.Println("rejected by skipper")
 	ctx.Serve(&http.Response{StatusCode: http.StatusUnauthorized})
 }
 
