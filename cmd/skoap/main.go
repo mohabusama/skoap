@@ -135,6 +135,10 @@ func main() {
 		logUsage("the team-check, realm, scopes and teams flags can be used only together with the target-address flag")
 	}
 
+	if !useTeamCheck && teamUrlBase != "" {
+		logUsage("the team-url can be used only together with the team-check flag")
+	}
+
 	if useTeamCheck && scopes != "" {
 		logUsage("the scopes flag can be used only without the team-check flag")
 	}
