@@ -1,3 +1,10 @@
+/*
+This command provides an executable http Skipper proxy with the skoap filters.
+
+For the list of command line options, run:
+
+	skoap -help
+*/
 package main
 
 import (
@@ -35,43 +42,46 @@ const (
 	usageHeader = `
 skoap - Skipper based reverse proxy with authentication.
 
-Use skoap to verify authorization tokens before forwarding requests, and optionally check OAuth realms and
-team membership. In addition to check incoming requests, optionally set basic authorzation headers for
-outgoing requests.
+Use the skoap proxy to verify authorization tokens before forwarding requests, and optionally check OAuth2 realms
+and scoap or team membership. In addition to check incoming requests, optionally set basic authorzation headers
+for outgoing requests.
+
+When used with eskip configuration files, it is possible to apply detailed augmentation of the requests and
+responses using Skipper rules.
+
+https://github.com/zalando/skipper
 
 `
 
-	addressUsage = `network address that hackauth should listen on`
+	addressUsage = `network address that skoap should listen on`
 
 	targetAddressUsage = `when authenticating to a single network endpoint, set its address (without path) as
 the -target-address`
 
 	useTeamCheckUsage = `when this flag set, skoap checks teams instead of oauth2 scopes for authorization`
 
-	realmUsage = `when target address is used to specify the target endpoint, and requests need to be
-authenticated against an OAuth realm, set the value of the realm with the flag. Note, that in case of a routes
-file is used, the realm can be set for each hackauth filter reference individually`
+	realmUsage = `when target address is used to specify the target endpoint, and the requests need to be
+authenticated against an OAuth2 realm, set the value of the realm with this flag. Note, that in case of a routes
+file is used, the realm can be set for each auth filter reference individually`
 
-	scopesUsage = `a comma separated list of the oauth2 scopes to be checked in addition to the token validation
+	scopesUsage = `a comma separated list of the OAuth2 scopes to be checked in addition to the token validation
 and the realm check`
 
-	teamsUsage = `when target address is used to specify the target endpoint, and requests need to be
-authenticated against one or more teams ('or' relation), set the value of the teams with the flag, as a comma
-separated list. The teams flag can be used only together with the realm flag. Note, that in case of a routes
-file is used, the realm can be set for each hackauth filter reference individually`
+	teamsUsage = `a comma separated list of the teams to be checked in addition to the token validation and the
+realm check`
 
 	routesFileUsage = `alternatively to the target address, it is possible to use a full eskip route
-configuration, and specify the hackauth() filter for the routes individually. See also:
+configuration, and specify the auth() and authTeam() filters for the routes individually. See also:
 https://godoc.org/github.com/zalando/skipper/eskip`
 
 	insecureUsage = `when this flag set, skipper will skip TLS verification`
 
 	authUrlBaseUsage = `URL base of the authentication service. The authentication token found
-in the incoming requests will appended to this url. Example:
-https://info.services.auth.zalando.com/oauth2/tokeninfo`
+in the incoming requests will be validated agains this service. It will be passed as the Authorization Bearer
+header`
 
 	teamUrlBaseUsage = `URL base of the team service. The user id received from the authentication service will
-be appended`
+be appended to this url, and the list of teams that the user is a member of will be requested`
 )
 
 type singleRouteClient eskip.Route
