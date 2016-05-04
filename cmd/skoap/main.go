@@ -133,25 +133,25 @@ func logUsage(message string) {
 }
 
 func main() {
-	if targetAddress == "" && routesFile == "" {
-		logUsage("either the target address or a routes file needs to be specified")
-	}
+	// if targetAddress == "" && routesFile == "" {
+	// 	logUsage("either the target address or a routes file needs to be specified")
+	// }
 
-	if targetAddress != "" && routesFile != "" {
-		logUsage("cannot set both the target address and a routes file")
-	}
+	// if targetAddress != "" && routesFile != "" {
+	// 	logUsage("cannot set both the target address and a routes file")
+	// }
 
-	if targetAddress == "" && (useTeamCheck || realm != "" || scopes != "" || teams != "") {
-		logUsage("the team-check, realm, scopes and teams flags can be used only together with the target-address flag")
-	}
+	// if targetAddress == "" && (useTeamCheck || realm != "" || scopes != "" || teams != "") {
+	// 	logUsage("the team-check, realm, scopes and teams flags can be used only together with the target-address flag")
+	// }
 
-	if !useTeamCheck && teamUrlBase != "" {
-		logUsage("the team-url can be used only together with the team-check flag")
-	}
+	// if !useTeamCheck && teamUrlBase != "" {
+	// 	logUsage("the team-url can be used only together with the team-check flag")
+	// }
 
-	if useTeamCheck && scopes != "" {
-		logUsage("the scopes flag can be used only without the team-check flag")
-	}
+	// if useTeamCheck && scopes != "" {
+	// 	logUsage("the scopes flag can be used only without the team-check flag")
+	// }
 
 	o := skipper.Options{
 		Address: address,
@@ -199,5 +199,6 @@ func main() {
 				Backend: targetAddress}}
 	}
 
+	// TODO: exit with 0 on -help
 	log.Fatal(skipper.Run(o))
 }

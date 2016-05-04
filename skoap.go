@@ -36,13 +36,13 @@ Check only if the request has a valid authentication token:
 Check if the request has a valid authentication token and the user
 of the token belongs to a realm:
 
-	* -> auth("/employess") -> "https://www.example.org"
+	* -> auth("/employees") -> "https://www.example.org"
 
 Check if the request has a valid authentication token, the user of
 the token belongs to a realm and has one of the specified scopes
 assigned:
 
-	* -> auth("/employees", "read-zmon") -> "https://www.example.org"
+	* -> auth("/employees", "read-zmon", "read-stups") -> "https://www.example.org"
 
 Check if the request has a valid authentication token, the user of
 the token belongs to a realm and belongs to one of the specified teams:
@@ -53,7 +53,7 @@ Check if the request has a valid authentication token, and the user
 has one of the specified scopes assigned regardless of the realm they
 belong to:
 
-	* -> auth("", "uid") -> "https://www.example.org"
+	* -> auth("", "read-zmon") -> "https://www.example.org"
 */
 package skoap
 
