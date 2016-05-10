@@ -69,7 +69,11 @@ import (
 	"strings"
 )
 
-const authHeaderName = "Authorization"
+const (
+	authHeaderName      = "Authorization"
+	authUserKey         = "auth-user"
+	authRejectReasonKey = "auth-reject-reason"
+)
 
 type roleCheckType int
 
@@ -78,11 +82,23 @@ const (
 	checkTeam
 )
 
+type rejectReason string
+
+const (
+	missingBearerToken rejectReason = "missing-bearer-token"
+	authServiceAccess  rejectReason = "auth-service-access"
+	invalidToken       rejectReason = "invalid-token"
+	invalidRealm       rejectReason = "invalid-realm"
+	invalidScope       rejectReason = "invalid-scope"
+	teamServiceAccess  rejectReason = "team-service-access"
+	invalidTeam        rejectReason = "invalid-team"
+)
+
 const (
 	AuthName      = "auth"
 	AuthTeamName  = "authTeam"
 	BasicAuthName = "basicAuth"
-	BodyLogName   = "bodyLog"
+	AuditLogName  = "auditLog"
 )
 
 type (
@@ -115,7 +131,7 @@ type (
 
 	basic string
 
-	bodyLog struct {
+	auditLog struct {
 		writer     io.Writer
 		maxBodyLog int
 	}
@@ -126,11 +142,25 @@ type (
 		teeReader io.Reader
 		maxTee    int
 	}
+
+	authStatusDoc struct {
+		User     string `json:"user,omitempty"`
+		Rejected bool   `json:"rejected"`
+		Reason   string `json:"reason,omitempty"`
+	}
+
+	auditDoc struct {
+		Method      string         `json:"method"`
+		Path        string         `json:"path"`
+		Status      int            `json:"status"`
+		AuthStatus  *authStatusDoc `json:"authStatus,omitempty"`
+		RequestBody string         `json:"requestBody,omitempty"`
+	}
 )
 
 var (
 	errInvalidAuthorizationHeader = errors.New("invalid authorization header")
-	errRequestFailed              = errors.New("request failed")
+	errInvalidToken               = errors.New("invalid token")
 )
 
 func getToken(r *http.Request) (string, error) {
@@ -143,9 +173,14 @@ func getToken(r *http.Request) (string, error) {
 	return h[len(b):], nil
 }
 
-func unauthorized(ctx filters.FilterContext) {
-	log.Println("rejected by skipper")
+func unauthorized(ctx filters.FilterContext, uname string, reason rejectReason) {
+	ctx.StateBag()[authUserKey] = uname
+	ctx.StateBag()[authRejectReasonKey] = string(reason)
 	ctx.Serve(&http.Response{StatusCode: http.StatusUnauthorized})
+}
+
+func authorized(ctx filters.FilterContext, uname string) {
+	ctx.StateBag()["auth-user"] = uname
 }
 
 func getStrings(args []interface{}) ([]string, error) {
@@ -190,7 +225,7 @@ func jsonGet(url, auth string, doc interface{}) error {
 
 	defer rsp.Body.Close()
 	if rsp.StatusCode != 200 {
-		return errRequestFailed
+		return errInvalidToken
 	}
 
 	d := json.NewDecoder(rsp.Body)
@@ -315,39 +350,45 @@ func (f *filter) Request(ctx filters.FilterContext) {
 
 	token, err := getToken(r)
 	if err != nil {
-		unauthorized(ctx)
+		unauthorized(ctx, "", missingBearerToken)
 		return
 	}
 
 	a, err := f.authClient.validate(token)
 	if err != nil {
-		unauthorized(ctx)
-		log.Println(err)
+		reason := authServiceAccess
+		if err == errInvalidToken {
+			reason = invalidToken
+		} else {
+			log.Println(err)
+		}
+
+		unauthorized(ctx, "", reason)
 		return
 	}
 
 	if !f.validateRealm(a) {
-		unauthorized(ctx)
+		unauthorized(ctx, a.Uid, invalidRealm)
 		return
 	}
 
 	if f.typ == checkScope {
 		if !f.validateScope(a) {
-			unauthorized(ctx)
+			unauthorized(ctx, a.Uid, invalidScope)
+			return
 		}
 
+		authorized(ctx, a.Uid)
 		return
 	}
 
-	valid, err := f.validateTeam(token, a)
-	if err != nil {
-		unauthorized(ctx)
+	if valid, err := f.validateTeam(token, a); err != nil {
+		unauthorized(ctx, a.Uid, teamServiceAccess)
 		log.Println(err)
-		return
-	}
-
-	if !valid {
-		unauthorized(ctx)
+	} else if !valid {
+		unauthorized(ctx, a.Uid, invalidTeam)
+	} else {
+		authorized(ctx, a.Uid)
 	}
 }
 
@@ -424,36 +465,66 @@ func (tb *teeBody) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func NewBodyLog(w io.Writer) filters.Spec {
-	return &bodyLog{w, -1}
+func NewAuditLog(w io.Writer) filters.Spec {
+	return &auditLog{writer: w}
 }
 
-func (bl *bodyLog) Name() string { return BodyLogName }
+func (al *auditLog) Name() string { return AuditLogName }
 
-func (bl *bodyLog) CreateFilter(args []interface{}) (filters.Filter, error) {
+func (al *auditLog) CreateFilter(args []interface{}) (filters.Filter, error) {
 	if len(args) == 0 {
-		return bl, nil
+		return al, nil
 	}
 
 	if mbl, ok := args[0].(float64); ok {
-		return &bodyLog{writer: bl.writer, maxBodyLog: int(mbl)}, nil
+		return &auditLog{writer: al.writer, maxBodyLog: int(mbl)}, nil
 	} else {
 		return nil, filters.ErrInvalidFilterParameters
 	}
 }
 
-func (bl *bodyLog) Request(ctx filters.FilterContext) {
-	ctx.Request().Body = newTeeBody(ctx.Request().Body, bl.maxBodyLog)
+func (al *auditLog) Request(ctx filters.FilterContext) {
+	if al.maxBodyLog != 0 {
+		ctx.Request().Body = newTeeBody(ctx.Request().Body, al.maxBodyLog)
+	}
 }
 
-func (bl *bodyLog) Response(ctx filters.FilterContext) {
-	if tb, ok := ctx.Request().Body.(*teeBody); ok {
+func (al *auditLog) Response(ctx filters.FilterContext) {
+	req := ctx.Request()
+
+	oreq := ctx.OriginalRequest()
+	rsp := ctx.Response()
+	doc := auditDoc{
+		Method: oreq.Method,
+		Path:   oreq.URL.Path,
+		Status: rsp.StatusCode}
+
+	sb := ctx.StateBag()
+	au, _ := sb[authUserKey].(string)
+	rr, _ := sb[authRejectReasonKey].(string)
+	if au != "" || rr != "" {
+		doc.AuthStatus = &authStatusDoc{User: au}
+		if rr != "" {
+			doc.AuthStatus.Rejected = true
+			doc.AuthStatus.Reason = rr
+		}
+	}
+
+	if tb, ok := req.Body.(*teeBody); ok {
 		if tb.maxTee < 0 {
 			io.Copy(tb.buffer, tb.body)
 		} else {
 			io.CopyN(tb.buffer, tb.body, int64(tb.maxTee))
 		}
 
-		io.Copy(bl.writer, tb.buffer)
+		if tb.buffer.Len() > 0 {
+			doc.RequestBody = tb.buffer.String()
+		}
+	}
+
+	enc := json.NewEncoder(al.writer)
+	err := enc.Encode(&doc)
+	if err != nil {
+		log.Println(err)
 	}
 }

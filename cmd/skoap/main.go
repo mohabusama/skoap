@@ -188,8 +188,9 @@ func main() {
 			skoap.New(authUrlBase),
 			skoap.NewTeamCheck(authUrlBase, teamUrlBase),
 			skoap.NewBasicAuth(),
-			skoap.NewBodyLog(os.Stderr)},
-		AccessLogDisabled: true}
+			skoap.NewAuditLog(os.Stderr)},
+		AccessLogDisabled: true,
+		ProxyOptions:      proxy.OptionsPreserveOriginal}
 
 	if insecure {
 		o.ProxyOptions |= proxy.OptionsInsecure
