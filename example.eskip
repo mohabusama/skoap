@@ -1,0 +1,6 @@
+route: * -> auth() -> "https://www.example.org";
+
+routeTeam: Header("X-Check-Type", "team")
+	-> authTeam("/employees", "pathfinder")
+	-> dropRequestHeader("X-Teamcheck")
+	-> "https://www.example.org";

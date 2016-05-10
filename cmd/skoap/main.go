@@ -24,7 +24,6 @@ import (
 const (
 	addressFlag       = "address"
 	targetAddressFlag = "target-address"
-	useTeamCheckFlag  = "team-check"
 	realmFlag         = "realm"
 	scopesFlag        = "scopes"
 	teamsFlag         = "teams"
@@ -45,6 +44,12 @@ skoap - Skipper based reverse proxy with authentication.
 Use the skoap proxy to verify authorization tokens before forwarding requests, and optionally check OAuth2 realms
 and scoap or team membership. In addition to check incoming requests, optionally set basic authorzation headers
 for outgoing requests.
+
+The command supports two modes:
+- single route mode: when a target address is specified, only a single route is used and the authorization
+  parameters (realm and scopes or teams) are specified as command line flags.
+- routes configuration: supports any number of routes with custom predicate and filter settings. The
+  authorization parameters are set in the routes file with the auth and authTeam filters.
 
 When used with eskip configuration files, it is possible to apply detailed augmentation of the requests and
 responses using Skipper rules.
@@ -86,10 +91,11 @@ be appended to this url, and the list of teams that the user is a member of will
 
 type singleRouteClient eskip.Route
 
+var fs *flag.FlagSet
+
 var (
 	address       string
 	targetAddress string
-	useTeamCheck  bool
 	realm         string
 	scopes        string
 	teams         string
@@ -107,51 +113,68 @@ func (src *singleRouteClient) LoadUpdate() ([]*eskip.Route, []string, error) {
 	return nil, nil, nil
 }
 
-func init() {
-	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, usageHeader)
-		flag.PrintDefaults()
-	}
+func usage() {
+	fmt.Fprint(os.Stderr, usageHeader)
+	fs.PrintDefaults()
+}
 
-	flag.StringVar(&address, addressFlag, "", addressUsage)
-	flag.StringVar(&targetAddress, targetAddressFlag, "", targetAddressUsage)
-	flag.BoolVar(&useTeamCheck, useTeamCheckFlag, false, useTeamCheckUsage)
-	flag.StringVar(&realm, realmFlag, "", realmUsage)
-	flag.StringVar(&scopes, scopesFlag, "", scopesUsage)
-	flag.StringVar(&teams, teamsFlag, "", teamsUsage)
-	flag.StringVar(&routesFile, routesFileFlag, "", routesFileUsage)
-	flag.BoolVar(&insecure, insecureFlag, false, insecureUsage)
-	flag.StringVar(&authUrlBase, authUrlBaseFlag, defaultAuthUrlBase, authUrlBaseUsage)
-	flag.StringVar(&teamUrlBase, teamUrlBaseFlag, defaultTeamUrlBase, teamUrlBaseUsage)
-	flag.Parse()
+func init() {
+	fs = flag.NewFlagSet("flags", flag.ContinueOnError)
+	fs.Usage = usage
+
+	fs.StringVar(&address, addressFlag, "", addressUsage)
+	fs.StringVar(&targetAddress, targetAddressFlag, "", targetAddressUsage)
+	fs.StringVar(&realm, realmFlag, "", realmUsage)
+	fs.StringVar(&scopes, scopesFlag, "", scopesUsage)
+	fs.StringVar(&teams, teamsFlag, "", teamsUsage)
+	fs.StringVar(&routesFile, routesFileFlag, "", routesFileUsage)
+	fs.BoolVar(&insecure, insecureFlag, false, insecureUsage)
+	fs.StringVar(&authUrlBase, authUrlBaseFlag, "", authUrlBaseUsage)
+	fs.StringVar(&teamUrlBase, teamUrlBaseFlag, "", teamUrlBaseUsage)
+
+	err := fs.Parse(os.Args[1:])
+	if err != nil {
+		if err == flag.ErrHelp {
+			os.Exit(0)
+		}
+
+		os.Exit(-1)
+	}
 }
 
 func logUsage(message string) {
-	fmt.Fprint(os.Stderr, message)
-	flag.Usage()
+	fmt.Fprintf(os.Stderr, "%s\n", message)
 	os.Exit(-1)
 }
 
 func main() {
-	// if targetAddress == "" && routesFile == "" {
-	// 	logUsage("either the target address or a routes file needs to be specified")
-	// }
+	if targetAddress == "" && routesFile == "" {
+		logUsage("either the target address or a routes file needs to be specified")
+	}
 
-	// if targetAddress != "" && routesFile != "" {
-	// 	logUsage("cannot set both the target address and a routes file")
-	// }
+	if targetAddress != "" && routesFile != "" {
+		logUsage("cannot set both the target address and a routes file")
+	}
 
-	// if targetAddress == "" && (useTeamCheck || realm != "" || scopes != "" || teams != "") {
-	// 	logUsage("the team-check, realm, scopes and teams flags can be used only together with the target-address flag")
-	// }
+	singleRouteMode := targetAddress != ""
 
-	// if !useTeamCheck && teamUrlBase != "" {
-	// 	logUsage("the team-url can be used only together with the team-check flag")
-	// }
+	if !singleRouteMode && (realm != "" || scopes != "" || teams != "") {
+		logUsage("the realm, scopes and teams flags can be used only together with the target-address flag (single route mode)")
+	}
 
-	// if useTeamCheck && scopes != "" {
-	// 	logUsage("the scopes flag can be used only without the team-check flag")
-	// }
+	if scopes != "" && teams != "" {
+		logUsage("the scopes and teams flags cannot be used together")
+	}
+
+	teamCheckMode := teams != ""
+
+	if authUrlBase == "" {
+		authUrlBase = defaultAuthUrlBase
+	}
+
+	if teamUrlBase == "" {
+		teamUrlBase = defaultTeamUrlBase
+	}
 
 	o := skipper.Options{
 		Address: address,
@@ -174,14 +197,14 @@ func main() {
 
 		args := scopes
 		name := skoap.AuthName
-		if useTeamCheck {
+		if teamCheckMode {
 			args = teams
 			name = skoap.AuthTeamName
 		}
 
 		if args != "" {
-			// realm set to empty
 			if realm == "" {
+				// realm set to empty
 				filterArgs = append(filterArgs, "")
 			}
 
@@ -199,6 +222,8 @@ func main() {
 				Backend: targetAddress}}
 	}
 
-	// TODO: exit with 0 on -help
-	log.Fatal(skipper.Run(o))
+	err := skipper.Run(o)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

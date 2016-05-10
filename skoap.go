@@ -91,7 +91,7 @@ type (
 	}
 
 	teamDoc struct {
-		Name string `json:"name"`
+		Id string `json:"id"`
 	}
 
 	spec struct {
@@ -193,7 +193,7 @@ func (tc *teamClient) getTeams(uid, token string) ([]string, error) {
 
 	ts := make([]string, len(t))
 	for i, ti := range t {
-		ts[i] = ti.Name
+		ts[i] = ti.Id
 	}
 
 	return ts, nil
