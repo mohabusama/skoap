@@ -10,8 +10,10 @@
 // 2. validates the incoming Authorization header
 // 3. drops the incoming Authorization header
 // 4. forwards the request to https://www.example.org
+// 5. prints audit log when the response is done
 //
 catchAll: *
+	-> auditLog()
 	-> auth()
 	-> dropRequestHeader("Authorization")
 	-> "https://www.example.org";
@@ -24,8 +26,11 @@ catchAll: *
 // 3. validates the realm of the owner of the token in the header
 // 4. sets a hardcoded outgoing Authorization header
 // 5. forwards the request to https://www.example.org
+// 6. prints audit log when the response is done, with the request
+//    body included, max. 1024 bytes
 //
 realmOnly: Host("^employees.foo.org$")
+	-> auditLog(1024)
 	-> auth("/employees")
 	-> basicAuth("user9", "secret")
 	-> "https://www.example.org";
@@ -39,8 +44,10 @@ realmOnly: Host("^employees.foo.org$")
 // 4. validates the assigned scopes of the token owner by looking for the first match
 // 5. sets a hardcoded outgoing Authorization header
 // 6. forwards the request to https://www.example.org
+// 7. prints audit log when the response is done, with the request
+//    body included, unlimited number of bytes (watch performance!!!)
 //
-scope: Host("^services.foo.org$")
+checkScope: Host("^services.foo.org$")
 	-> auth("/services", "read-kio", "write-kio")
 	-> basicAuth("service9", "secret")
 	-> "https://www.example.org";
@@ -54,6 +61,6 @@ scope: Host("^services.foo.org$")
 // 4. validates the team membership of the token owner by looking for the first match
 // 5. forwards the request to https://www.example.org with the incoming Authorization header
 //
-team: Host("^employees.foo.org$") && Path("/my-home")
+checkTeam: Host("^employees.foo.org$") && Path("/my-home")
 	-> authTeam("/employees", "monkey", "mop")
 	-> "https://www.example.org";
