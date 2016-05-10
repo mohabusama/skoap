@@ -186,7 +186,8 @@ func main() {
 		Address: address,
 		CustomFilters: []filters.Spec{
 			skoap.New(authUrlBase),
-			skoap.NewTeamCheck(authUrlBase, teamUrlBase)},
+			skoap.NewTeamCheck(authUrlBase, teamUrlBase),
+			skoap.BasicAuth},
 		AccessLogDisabled: true}
 
 	if insecure {

@@ -58,6 +58,7 @@ belong to:
 package skoap
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/zalando/skipper/filters"
@@ -76,8 +77,9 @@ const (
 )
 
 const (
-	AuthName     = "auth"
-	AuthTeamName = "authTeam"
+	AuthName      = "auth"
+	AuthTeamName  = "authTeam"
+	BasicAuthName = "basicAuth"
 )
 
 type (
@@ -107,12 +109,16 @@ type (
 		realm      string
 		args       []string
 	}
+
+	basic string
 )
 
 var (
 	errInvalidAuthorizationHeader = errors.New("invalid authorization header")
 	errRequestFailed              = errors.New("request failed")
 )
+
+var BasicAuth filters.Spec = basic("")
 
 func getToken(r *http.Request) (string, error) {
 	const b = "Bearer "
@@ -334,3 +340,33 @@ func (f *filter) Request(ctx filters.FilterContext) {
 
 // filters.Filter implementation
 func (f *filter) Response(_ filters.FilterContext) {}
+
+func (b basic) Name() string { return BasicAuthName }
+
+func (b basic) CreateFilter(args []interface{}) (filters.Filter, error) {
+	var (
+		uname, pwd string
+		ok         bool
+	)
+
+	if len(args) > 0 {
+		if uname, ok = args[0].(string); !ok {
+			return nil, filters.ErrInvalidFilterParameters
+		}
+	}
+
+	if len(args) > 1 {
+		if pwd, ok = args[1].(string); !ok {
+			return nil, filters.ErrInvalidFilterParameters
+		}
+	}
+
+	v := base64.StdEncoding.EncodeToString([]byte(uname + ":" + pwd))
+	return basic("Basic " + v), nil
+}
+
+func (b basic) Request(ctx filters.FilterContext) {
+	ctx.Request().Header.Set(authHeaderName, string(b))
+}
+
+func (b basic) Response(_ filters.FilterContext) {}

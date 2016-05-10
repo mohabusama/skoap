@@ -164,11 +164,7 @@ func Test(t *testing.T) {
 		auth:        testToken,
 		statusCode:  http.StatusOK,
 	}} {
-		backend := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			if r.Header[authHeaderName] != nil {
-				t.Error(ti.msg, "authorization header was not removed")
-			}
-		}))
+		backend := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {}))
 
 		authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != testAuthPath {

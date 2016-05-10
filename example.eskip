@@ -27,7 +27,7 @@ catchAll: *
 //
 realmOnly: Host("^employees.foo.org$")
 	-> auth("/employees")
-	-> setRequestHeader("Authorization", "Basic dGVhbTpwd2QK")
+	-> basicAuth("user9", "secret")
 	-> "https://www.example.org";
 
 
@@ -42,7 +42,7 @@ realmOnly: Host("^employees.foo.org$")
 //
 scope: Host("^services.foo.org$")
 	-> auth("/services", "read-kio", "write-kio")
-	-> setRequestHeader("Authorization", "Basic dXNlcjpwd2QK")
+	-> basicAuth("service9", "secret")
 	-> "https://www.example.org";
 
 
