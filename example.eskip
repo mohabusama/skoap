@@ -48,6 +48,7 @@ realmOnly: Host("^employees.foo.org$")
 //    body included, unlimited number of bytes (watch performance!!!)
 //
 checkScope: Host("^services.foo.org$")
+	-> auditLog(-1)
 	-> auth("/services", "read-kio", "write-kio")
 	-> basicAuth("service9", "secret")
 	-> "https://www.example.org";
