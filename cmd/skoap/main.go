@@ -187,7 +187,8 @@ func main() {
 		CustomFilters: []filters.Spec{
 			skoap.New(authUrlBase),
 			skoap.NewTeamCheck(authUrlBase, teamUrlBase),
-			skoap.BasicAuth},
+			skoap.NewBasicAuth(),
+			skoap.NewBodyLog(os.Stderr)},
 		AccessLogDisabled: true}
 
 	if insecure {

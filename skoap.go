@@ -58,10 +58,12 @@ belong to:
 package skoap
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"github.com/zalando/skipper/filters"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -80,6 +82,7 @@ const (
 	AuthName      = "auth"
 	AuthTeamName  = "authTeam"
 	BasicAuthName = "basicAuth"
+	BodyLogName   = "bodyLog"
 )
 
 type (
@@ -111,14 +114,24 @@ type (
 	}
 
 	basic string
+
+	bodyLog struct {
+		writer     io.Writer
+		maxBodyLog int
+	}
+
+	teeBody struct {
+		body      io.ReadCloser
+		buffer    *bytes.Buffer
+		teeReader io.Reader
+		maxTee    int
+	}
 )
 
 var (
 	errInvalidAuthorizationHeader = errors.New("invalid authorization header")
 	errRequestFailed              = errors.New("request failed")
 )
-
-var BasicAuth filters.Spec = basic("")
 
 func getToken(r *http.Request) (string, error) {
 	const b = "Bearer "
@@ -341,8 +354,12 @@ func (f *filter) Request(ctx filters.FilterContext) {
 // filters.Filter implementation
 func (f *filter) Response(_ filters.FilterContext) {}
 
+func NewBasicAuth() filters.Spec { return basic(BasicAuthName) }
+
+// filters.Spec implementation
 func (b basic) Name() string { return BasicAuthName }
 
+// filters.Spec implementation
 func (b basic) CreateFilter(args []interface{}) (filters.Filter, error) {
 	var (
 		uname, pwd string
@@ -365,8 +382,78 @@ func (b basic) CreateFilter(args []interface{}) (filters.Filter, error) {
 	return basic("Basic " + v), nil
 }
 
+// filters.Filter implementation
 func (b basic) Request(ctx filters.FilterContext) {
 	ctx.Request().Header.Set(authHeaderName, string(b))
 }
 
+// filters.Filter implementation
 func (b basic) Response(_ filters.FilterContext) {}
+
+func newTeeBody(rc io.ReadCloser, maxTee int) io.ReadCloser {
+	b := bytes.NewBuffer(nil)
+	tb := &teeBody{
+		body:   rc,
+		buffer: b,
+		maxTee: maxTee}
+	tb.teeReader = io.TeeReader(rc, tb)
+	return tb
+}
+
+func (tb *teeBody) Read(b []byte) (int, error) { return tb.teeReader.Read(b) }
+func (tb *teeBody) Close() error               { return tb.body.Close() }
+
+func (tb *teeBody) Write(b []byte) (int, error) {
+	if tb.maxTee < 0 {
+		return tb.buffer.Write(b)
+	}
+
+	wl := len(b)
+	if wl >= tb.maxTee {
+		wl = tb.maxTee
+	}
+
+	n, err := tb.buffer.Write(b[:wl])
+	if err != nil {
+		return n, err
+	}
+
+	tb.maxTee -= n
+
+	// lie to avoid short write
+	return len(b), nil
+}
+
+func NewBodyLog(w io.Writer) filters.Spec {
+	return &bodyLog{w, -1}
+}
+
+func (bl *bodyLog) Name() string { return BodyLogName }
+
+func (bl *bodyLog) CreateFilter(args []interface{}) (filters.Filter, error) {
+	if len(args) == 0 {
+		return bl, nil
+	}
+
+	if mbl, ok := args[0].(float64); ok {
+		return &bodyLog{writer: bl.writer, maxBodyLog: int(mbl)}, nil
+	} else {
+		return nil, filters.ErrInvalidFilterParameters
+	}
+}
+
+func (bl *bodyLog) Request(ctx filters.FilterContext) {
+	ctx.Request().Body = newTeeBody(ctx.Request().Body, bl.maxBodyLog)
+}
+
+func (bl *bodyLog) Response(ctx filters.FilterContext) {
+	if tb, ok := ctx.Request().Body.(*teeBody); ok {
+		if tb.maxTee < 0 {
+			io.Copy(tb.buffer, tb.body)
+		} else {
+			io.CopyN(tb.buffer, tb.body, int64(tb.maxTee))
+		}
+
+		io.Copy(bl.writer, tb.buffer)
+	}
+}
