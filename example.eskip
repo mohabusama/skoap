@@ -1,6 +1,59 @@
-route: * -> auth() -> "https://www.example.org";
+///////////////////////////
+//                       //
+// Skoap example routing //
+//                       //
+///////////////////////////
 
-routeTeam: Header("X-Check-Type", "team")
-	-> authTeam("/employees", "pathfinder")
-	-> dropRequestHeader("X-Teamcheck")
+// Just check the token
+//
+// 1. matches all requests that the other routes don't
+// 2. validates the incoming Authorization header
+// 3. drops the incoming Authorization header
+// 4. forwards the request to https://www.example.org
+//
+catchAll: *
+	-> auth()
+	-> dropRequestHeader("Authorization")
+	-> "https://www.example.org";
+
+
+// Employees only with hardcoded basic
+//
+// 1. matches requests to host employees.foo.org
+// 2. validates the incoming Authorization header
+// 3. validates the realm of the owner of the token in the header
+// 4. sets a hardcoded outgoing Authorization header
+// 5. forwards the request to https://www.example.org
+//
+realmOnly: Host("^employees.foo.org$")
+	-> auth("/employees")
+	-> setRequestHeader("Authorization", "Basic dGVhbTpwd2QK")
+	-> "https://www.example.org";
+
+
+// Services with scopes only
+//
+// 1. matches requests to host services.foo.org
+// 2. validates the incoming Authorization header
+// 3. validates the realm of the owner of the token in the header
+// 4. validates the assigned scopes of the token owner by looking for the first match
+// 5. sets a hardcoded outgoing Authorization header
+// 6. forwards the request to https://www.example.org
+//
+scope: Host("^services.foo.org$")
+	-> auth("/services", "read-kio", "write-kio")
+	-> setRequestHeader("Authorization", "Basic dXNlcjpwd2QK")
+	-> "https://www.example.org";
+
+
+// Employees in the right team as themselves
+//
+// 1. matches requests to host employees.foo.org with path /my-home
+// 2. validates the incoming Authorization header
+// 3. validates the realm of the owner of the token in the header
+// 4. validates the team membership of the token owner by looking for the first match
+// 5. forwards the request to https://www.example.org with the incoming Authorization header
+//
+team: Host("^employees.foo.org$") && Path("/my-home")
+	-> authTeam("/employees", "monkey", "mop")
 	-> "https://www.example.org";

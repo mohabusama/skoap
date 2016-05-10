@@ -300,8 +300,6 @@ func (f *filter) Request(ctx filters.FilterContext) {
 		return
 	}
 
-	r.Header.Del(authHeaderName)
-
 	a, err := f.authClient.validate(token)
 	if err != nil {
 		unauthorized(ctx)

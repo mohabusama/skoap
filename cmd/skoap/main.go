@@ -14,6 +14,7 @@ import (
 	"github.com/zalando/skipper"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
+	"github.com/zalando/skipper/filters/builtin"
 	"github.com/zalando/skipper/proxy"
 	"github.com/zalando/skipper/routing"
 	"log"
@@ -22,13 +23,14 @@ import (
 )
 
 const (
-	addressFlag       = "address"
-	targetAddressFlag = "target-address"
-	realmFlag         = "realm"
-	scopesFlag        = "scopes"
-	teamsFlag         = "teams"
-	routesFileFlag    = "routes-file"
-	insecureFlag      = "insecure"
+	addressFlag        = "address"
+	targetAddressFlag  = "target-address"
+	preserveHeaderFlag = "preserve-header"
+	realmFlag          = "realm"
+	scopesFlag         = "scopes"
+	teamsFlag          = "teams"
+	routesFileFlag     = "routes-file"
+	insecureFlag       = "insecure"
 
 	authUrlBaseFlag    = "auth-url"
 	defaultAuthUrlBase = "http://[::1]:9081?access_token="
@@ -63,6 +65,8 @@ https://github.com/zalando/skipper
 	targetAddressUsage = `when authenticating to a single network endpoint, set its address (without path) as
 the -target-address`
 
+	preserveHeaderUsage = `when forwarding requests, preserve the Authorization header in the outgoing request`
+
 	useTeamCheckUsage = `when this flag set, skoap checks teams instead of oauth2 scopes for authorization`
 
 	realmUsage = `when target address is used to specify the target endpoint, and the requests need to be
@@ -94,15 +98,16 @@ type singleRouteClient eskip.Route
 var fs *flag.FlagSet
 
 var (
-	address       string
-	targetAddress string
-	realm         string
-	scopes        string
-	teams         string
-	routesFile    string
-	insecure      bool
-	authUrlBase   string
-	teamUrlBase   string
+	address        string
+	targetAddress  string
+	preserveHeader bool
+	realm          string
+	scopes         string
+	teams          string
+	routesFile     string
+	insecure       bool
+	authUrlBase    string
+	teamUrlBase    string
 )
 
 func (src *singleRouteClient) LoadAll() ([]*eskip.Route, error) {
@@ -124,6 +129,7 @@ func init() {
 
 	fs.StringVar(&address, addressFlag, "", addressUsage)
 	fs.StringVar(&targetAddress, targetAddressFlag, "", targetAddressUsage)
+	fs.BoolVar(&preserveHeader, preserveHeaderFlag, false, preserveHeaderUsage)
 	fs.StringVar(&realm, realmFlag, "", realmUsage)
 	fs.StringVar(&scopes, scopesFlag, "", scopesUsage)
 	fs.StringVar(&teams, teamsFlag, "", teamsUsage)
@@ -158,8 +164,8 @@ func main() {
 
 	singleRouteMode := targetAddress != ""
 
-	if !singleRouteMode && (realm != "" || scopes != "" || teams != "") {
-		logUsage("the realm, scopes and teams flags can be used only together with the target-address flag (single route mode)")
+	if !singleRouteMode && (preserveHeader || realm != "" || scopes != "" || teams != "") {
+		logUsage("the preserve-header, realm, scopes and teams flags can be used only together with the target-address flag (single route mode)")
 	}
 
 	if scopes != "" && teams != "" {
@@ -214,11 +220,18 @@ func main() {
 			}
 		}
 
+		f := []*eskip.Filter{{
+			Name: name,
+			Args: filterArgs}}
+		if !preserveHeader {
+			f = append(f, &eskip.Filter{
+				Name: builtin.DropRequestHeaderName,
+				Args: []interface{}{"Authorization"}})
+		}
+
 		o.CustomDataClients = []routing.DataClient{
 			&singleRouteClient{
-				Filters: []*eskip.Filter{{
-					Name: name,
-					Args: filterArgs}},
+				Filters: f,
 				Backend: targetAddress}}
 	}
 
