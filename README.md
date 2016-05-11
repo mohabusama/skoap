@@ -98,7 +98,7 @@ The route configuration file has to be in 'eskip' format. See more details at:
 
 [https://godoc.org/github.com/zalando/skipper/eskip](https://godoc.org/github.com/zalando/skipper/eskip)
 
-...or see the example below.
+...and see the Skoap specific example below.
 
 In multi-route mode, the realm, scopes, teams and dropping the Authorization header is defined individually for
 each route in the config file. In addition to the built-in Skipper filters, Skoap provides additional filters to
