@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"github.bus.zalan.do/aryszka/skoap"
+	"github.com/Sirupsen/logrus"
 	"github.com/zalando/skipper"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
@@ -37,6 +38,8 @@ const (
 
 	teamUrlBaseFlag    = "team-url"
 	defaultTeamUrlBase = "http://[::1]:9082"
+
+	verboseFlag = "v"
 )
 
 const (
@@ -91,6 +94,8 @@ header`
 
 	teamUrlBaseUsage = `URL base of the team service. The user id received from the authentication service will
 be appended to this url, and the list of teams that the user is a member of will be requested`
+
+	verboseUsage = `log level: Debug`
 )
 
 type singleRouteClient eskip.Route
@@ -108,6 +113,7 @@ var (
 	insecure       bool
 	authUrlBase    string
 	teamUrlBase    string
+	verbose        bool
 )
 
 func (src *singleRouteClient) LoadAll() ([]*eskip.Route, error) {
@@ -137,6 +143,7 @@ func init() {
 	fs.BoolVar(&insecure, insecureFlag, false, insecureUsage)
 	fs.StringVar(&authUrlBase, authUrlBaseFlag, "", authUrlBaseUsage)
 	fs.StringVar(&teamUrlBase, teamUrlBaseFlag, "", teamUrlBaseUsage)
+	fs.BoolVar(&verbose, verboseFlag, false, verboseUsage)
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -154,6 +161,12 @@ func logUsage(message string) {
 }
 
 func main() {
+	if verbose {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else {
+		logrus.SetLevel(logrus.WarnLevel)
+	}
+
 	if targetAddress == "" && routesFile == "" {
 		logUsage("either the target address or a routes file needs to be specified")
 	}
