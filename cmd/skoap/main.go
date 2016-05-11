@@ -185,8 +185,8 @@ func main() {
 	o := skipper.Options{
 		Address: address,
 		CustomFilters: []filters.Spec{
-			skoap.New(authUrlBase),
-			skoap.NewTeamCheck(authUrlBase, teamUrlBase),
+			skoap.NewAuth(authUrlBase),
+			skoap.NewAuthTeam(authUrlBase, teamUrlBase),
 			skoap.NewBasicAuth(),
 			skoap.NewAuditLog(os.Stderr)},
 		AccessLogDisabled: true,

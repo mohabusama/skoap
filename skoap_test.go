@@ -212,9 +212,9 @@ func Test(t *testing.T) {
 
 		var s filters.Spec
 		if ti.typ == checkScope {
-			s = New(authServer.URL + ti.authBaseUrl)
+			s = NewAuth(authServer.URL + ti.authBaseUrl)
 		} else {
-			s = NewTeamCheck(authServer.URL+ti.authBaseUrl, teamServer.URL+ti.teamBaseUrl)
+			s = NewAuthTeam(authServer.URL+ti.authBaseUrl, teamServer.URL+ti.teamBaseUrl)
 		}
 		fr := make(filters.Registry)
 		fr.Register(s)

@@ -1,22 +1,25 @@
 /*
-Package skoap implements an authentication filters for Skipper.
+Package skoap implements authentication extensions for Skipper.
 
-This package provides a Skipper extension, for details of using
-it, please see the Skipper documentation:
+The package contains four filters: auth, authTeam, auditLog and
+basicAuth. For details on how to extend Skipper with additional
+filters, please see the main Skipper documentation:
 
 https://godoc.org/github.com/zalando/skipper
 
-The package contains two filters: auth and authTeam.
+Filter auth
 
 The auth filter takes the Authorization header from the request,
-assuming that it is an OAuth2 Bearer token, and validates it
-against the configured token validation service.
+assuming that it is a Bearer token, and validates it against the
+configured token validation service.
 
 If the OAuth2 realm is set for the filter, then it checks if the
 user of the token belongs to that realm.
 
-If OAuth2 scopes are set for the filter, then it checks if the
+If the OAuth2 scopes are set for the filter, then it checks if the
 user of the token has at least one of the configured scopes assigned.
+
+Filter authTeam
 
 The authTeam filter works exactly the same as the auth filter, but
 instead of scopes, it checks if the user is a member of a team. To
@@ -24,10 +27,10 @@ get the teams of the user, the filter makes an additional request,
 with the available authorization token, to a configured team API
 endpoint.
 
+Authentication examples
+
 To check only the scopes or the teams, the first argument of the
 filter needs to be set to empty, "".
-
-Examples:
 
 Check only if the request has a valid authentication token:
 
@@ -54,6 +57,39 @@ has one of the specified scopes assigned regardless of the realm they
 belong to:
 
 	* -> auth("", "read-zmon") -> "https://www.example.org"
+
+In many cases, it can be a good idea to remove the Authorization header:
+
+	* -> auth() -> dropRequestHeader("Authorization") -> "https://www.example.org"
+
+Outgoing basic auth
+
+The package provides a filter that can set basic authorization headers
+for outgoing requests, with credentials hardcoded in the route
+configuration.
+
+Example:
+
+	* -> basicAuth("username", "pwd") -> "https://www.example.org"
+
+Audit log
+
+The auditLog filter prints the request method and path, and the response
+status in JSON format. If the request was authenticated, it prints the
+username of the token owner. If the request was rejected due to failing
+authentication, it also prints the reject reason.
+
+The audiLog can print the request body, too, if configured. If the max
+length of the request body logging is set to -1, it prints the complete
+body, otherwise it prints maximum to the configured limit.
+
+Since the body is logged withing the same log entry as the other values,
+the logged part of the body is buffered until it is written to the output.
+With large or infinite limit, this can have performance implications.
+
+Example:
+
+	* -> auditLog(1024) -> auth() -> "https://www.example.org"
 */
 package skoap
 
@@ -265,36 +301,35 @@ func newSpec(typ roleCheckType, authUrlBase, teamUrlBase string) filters.Spec {
 // Creates a new auth filter specification to validate authorization
 // tokens, optionally check realms and optionally check scopes.
 //
-// - authUrlBase: the url of the token validation service.
+// authUrlBase: the url of the token validation service.
 // The filter expects the service to validate the token found in the
 // Authorization header and in case of a valid token, it expects it
 // to return the user id and the realm of the user associated with
 // the token ('uid' and 'realm' fields in the returned json document).
 // The token is set as the Authorization Bearer header.
 //
-func New(authUrlBase string) filters.Spec {
+func NewAuth(authUrlBase string) filters.Spec {
 	return newSpec(checkScope, authUrlBase, "")
 }
 
 // Creates a new auth filter specification to validate authorization
 // tokens, optionally check realms and optionally check teams.
 //
-// - authUrlBase: the url of the token validation service. The filter
+// authUrlBase: the url of the token validation service. The filter
 // expects the service to validate the token found in the Authorization
 // header and in case of a valid token, it expects it to return the
 // user id and the realm of the user associated with the token ('uid'
 // and 'realm' fields in the returned json document). The token is set
 // as the Authorization Bearer header.
 //
-// - teamUrlBase: this service is queried for the team ids, that the
+// teamUrlBase: this service is queried for the team ids, that the
 // user is a member of ('id' field of the returned json document's
 // items). The user id of the user is appended at the end of the url.
 //
-func NewTeamCheck(authUrlBase, teamUrlBase string) filters.Spec {
+func NewAuthTeam(authUrlBase, teamUrlBase string) filters.Spec {
 	return newSpec(checkTeam, authUrlBase, teamUrlBase)
 }
 
-// filters.Spec implementation
 func (s *spec) Name() string {
 	if s.typ == checkScope {
 		return AuthName
@@ -303,7 +338,6 @@ func (s *spec) Name() string {
 	}
 }
 
-// filters.Spec implementation
 func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	sargs, err := getStrings(args)
 	if err != nil {
@@ -344,7 +378,6 @@ func (f *filter) validateTeam(token string, a *authDoc) (bool, error) {
 	return intersect(f.args, teams), err
 }
 
-// filters.Filter implementation
 func (f *filter) Request(ctx filters.FilterContext) {
 	r := ctx.Request()
 
@@ -392,15 +425,13 @@ func (f *filter) Request(ctx filters.FilterContext) {
 	}
 }
 
-// filters.Filter implementation
 func (f *filter) Response(_ filters.FilterContext) {}
 
+// Creates basicAuth filter specification.
 func NewBasicAuth() filters.Spec { return basic(BasicAuthName) }
 
-// filters.Spec implementation
 func (b basic) Name() string { return BasicAuthName }
 
-// filters.Spec implementation
 func (b basic) CreateFilter(args []interface{}) (filters.Filter, error) {
 	var (
 		uname, pwd string
@@ -423,12 +454,10 @@ func (b basic) CreateFilter(args []interface{}) (filters.Filter, error) {
 	return basic("Basic " + v), nil
 }
 
-// filters.Filter implementation
 func (b basic) Request(ctx filters.FilterContext) {
 	ctx.Request().Header.Set(authHeaderName, string(b))
 }
 
-// filters.Filter implementation
 func (b basic) Response(_ filters.FilterContext) {}
 
 func newTeeBody(rc io.ReadCloser, maxTee int) io.ReadCloser {
@@ -465,6 +494,10 @@ func (tb *teeBody) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+// Creates an auditLog filter specification. It expects a writer for
+// the output of the log entries.
+//
+//     spec := NewAuditLog(os.Stderr)
 func NewAuditLog(w io.Writer) filters.Spec {
 	return &auditLog{writer: w}
 }
