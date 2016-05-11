@@ -34,10 +34,10 @@ const (
 	insecureFlag       = "insecure"
 
 	authUrlBaseFlag    = "auth-url"
-	defaultAuthUrlBase = "http://[::1]:9081?access_token="
+	defaultAuthUrlBase = "http://[::1]:9081"
 
 	teamUrlBaseFlag    = "team-url"
-	defaultTeamUrlBase = "http://[::1]:9082"
+	defaultTeamUrlBase = "http://[::1]:9082/?uid="
 
 	verboseFlag = "v"
 )
