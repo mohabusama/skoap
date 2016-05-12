@@ -33,6 +33,7 @@ const (
 	routesFileFlag     = "routes-file"
 	insecureFlag       = "insecure"
 
+	defaultAddress     = ":9090"
 	authUrlBaseFlag    = "auth-url"
 	defaultAuthUrlBase = "http://[::1]:9081"
 
@@ -133,7 +134,7 @@ func init() {
 	fs = flag.NewFlagSet("flags", flag.ContinueOnError)
 	fs.Usage = usage
 
-	fs.StringVar(&address, addressFlag, "", addressUsage)
+	fs.StringVar(&address, addressFlag, defaultAddress, addressUsage)
 	fs.StringVar(&targetAddress, targetAddressFlag, "", targetAddressUsage)
 	fs.BoolVar(&preserveHeader, preserveHeaderFlag, false, preserveHeaderUsage)
 	fs.StringVar(&realm, realmFlag, "", realmUsage)
