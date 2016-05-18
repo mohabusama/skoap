@@ -10,6 +10,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+
 	"github.bus.zalan.do/aryszka/skoap"
 	"github.com/Sirupsen/logrus"
 	"github.com/zalando/skipper"
@@ -18,9 +22,6 @@ import (
 	"github.com/zalando/skipper/filters/builtin"
 	"github.com/zalando/skipper/proxy"
 	"github.com/zalando/skipper/routing"
-	"log"
-	"os"
-	"strings"
 )
 
 const (
@@ -39,6 +40,9 @@ const (
 
 	teamUrlBaseFlag    = "team-url"
 	defaultTeamUrlBase = "http://[::1]:9082/?uid="
+
+	tlsCertFlag = "tls-cert"
+	tlsKeyFlag  = "tls-key"
 
 	verboseFlag = "v"
 )
@@ -96,6 +100,10 @@ header`
 	teamUrlBaseUsage = `URL base of the team service. The user id received from the authentication service will
 be appended to this url, and the list of teams that the user is a member of will be requested`
 
+	// TODO
+	certPathTLSUsage = "path of the certificate file"
+	keyPathTLSUsage  = "path of the key"
+
 	verboseUsage = `log level: Debug`
 )
 
@@ -114,6 +122,8 @@ var (
 	insecure       bool
 	authUrlBase    string
 	teamUrlBase    string
+	certPathTLS    string
+	keyPathTLS     string
 	verbose        bool
 )
 
@@ -144,6 +154,8 @@ func init() {
 	fs.BoolVar(&insecure, insecureFlag, false, insecureUsage)
 	fs.StringVar(&authUrlBase, authUrlBaseFlag, "", authUrlBaseUsage)
 	fs.StringVar(&teamUrlBase, teamUrlBaseFlag, "", teamUrlBaseUsage)
+	fs.StringVar(&certPathTLS, tlsCertFlag, "", certPathTLSUsage)
+	fs.StringVar(&keyPathTLS, tlsKeyFlag, "", keyPathTLSUsage)
 	fs.BoolVar(&verbose, verboseFlag, false, verboseUsage)
 
 	err := fs.Parse(os.Args[1:])
@@ -204,7 +216,10 @@ func main() {
 			skoap.NewBasicAuth(),
 			skoap.NewAuditLog(os.Stderr)},
 		AccessLogDisabled: true,
-		ProxyOptions:      proxy.OptionsPreserveOriginal}
+		ProxyOptions:      proxy.OptionsPreserveOriginal,
+		CertPathTLS:       certPathTLS,
+		KeyPathTLS:        keyPathTLS,
+	}
 
 	if insecure {
 		o.ProxyOptions |= proxy.OptionsInsecure
