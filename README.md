@@ -83,6 +83,14 @@ A comma-separated list of OAuth2 scopes to check in addition to token validation
 A comma-separated list of teams to check in addition to token validation. It doesn't work together with scope
 checking.
 
+##### -audit-log
+
+Flag enabling the audit log.
+
+##### -audit-log-limit
+
+Set the byte limit for request body in the audit log. Default: 1024.
+
 ### Multi-route mode
 
 A more advanced way of using Skoap is to use a routes file, where multiple routes can be configured with

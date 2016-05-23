@@ -31,6 +31,8 @@ const (
 	realmFlag          = "realm"
 	scopesFlag         = "scopes"
 	teamsFlag          = "teams"
+	auditFlag          = "audit-log"
+	auditBodyFlag      = "audit-log-limit"
 	routesFileFlag     = "routes-file"
 	insecureFlag       = "insecure"
 
@@ -75,8 +77,6 @@ the -target-address`
 
 	preserveHeaderUsage = `when forwarding requests, preserve the Authorization header in the outgoing request`
 
-	useTeamCheckUsage = `when this flag set, skoap checks teams instead of oauth2 scopes for authorization`
-
 	realmUsage = `when target address is used to specify the target endpoint, and the requests need to be
 authenticated against an OAuth2 realm, set the value of the realm with this flag. Note, that in case of a routes
 file is used, the realm can be set for each auth filter reference individually`
@@ -86,6 +86,10 @@ and the realm check`
 
 	teamsUsage = `a comma separated list of the teams to be checked in addition to the token validation and the
 realm check`
+
+	auditUsage = `enable audit log in single route mode`
+
+	auditBodyUsage = `set the limit of the audit log body`
 
 	routesFileUsage = `alternatively to the target address, it is possible to use a full eskip route
 configuration, and specify the auth() and authTeam() filters for the routes individually. See also:
@@ -118,6 +122,8 @@ var (
 	realm          string
 	scopes         string
 	teams          string
+	audit          bool
+	auditBody      int
 	routesFile     string
 	insecure       bool
 	authUrlBase    string
@@ -150,6 +156,8 @@ func init() {
 	fs.StringVar(&realm, realmFlag, "", realmUsage)
 	fs.StringVar(&scopes, scopesFlag, "", scopesUsage)
 	fs.StringVar(&teams, teamsFlag, "", teamsUsage)
+	fs.BoolVar(&audit, auditFlag, false, auditUsage)
+	fs.IntVar(&auditBody, auditBodyFlag, 1024, auditBodyUsage)
 	fs.StringVar(&routesFile, routesFileFlag, "", routesFileUsage)
 	fs.BoolVar(&insecure, insecureFlag, false, insecureUsage)
 	fs.StringVar(&authUrlBase, authUrlBaseFlag, "", authUrlBaseUsage)
@@ -190,8 +198,12 @@ func main() {
 
 	singleRouteMode := targetAddress != ""
 
-	if !singleRouteMode && (preserveHeader || realm != "" || scopes != "" || teams != "") {
-		logUsage("the preserve-header, realm, scopes and teams flags can be used only together with the target-address flag (single route mode)")
+	if !singleRouteMode && (preserveHeader || realm != "" || scopes != "" || teams != "" || audit || auditBody != 1024) {
+		logUsage("the preserve-header, realm, scopes, teams, audit-log and audit-log-limit flags can be used only together with the target-address flag (single route mode)")
+	}
+
+	if !audit && auditBody != 1024 {
+		logUsage("the audit-log-limit flag can be set only together with the audit-log flag")
 	}
 
 	if scopes != "" && teams != "" {
@@ -255,10 +267,17 @@ func main() {
 		f := []*eskip.Filter{{
 			Name: name,
 			Args: filterArgs}}
+
 		if !preserveHeader {
 			f = append(f, &eskip.Filter{
 				Name: builtin.DropRequestHeaderName,
 				Args: []interface{}{"Authorization"}})
+		}
+
+		if audit {
+			f = append(f, &eskip.Filter{
+				Name: skoap.AuditLogName,
+				Args: []interface{}{float64(auditBody)}})
 		}
 
 		o.CustomDataClients = []routing.DataClient{
