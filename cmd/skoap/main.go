@@ -275,9 +275,9 @@ func main() {
 		}
 
 		if audit {
-			f = append(f, &eskip.Filter{
+			f = append([]*eskip.Filter{&eskip.Filter{
 				Name: skoap.AuditLogName,
-				Args: []interface{}{float64(auditBody)}})
+				Args: []interface{}{float64(auditBody)}}}, f...)
 		}
 
 		o.CustomDataClients = []routing.DataClient{
