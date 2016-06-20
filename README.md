@@ -1,5 +1,14 @@
 # Skoap
 
+## Incubator Help Welcome
+
+The library and command in this repository currently depends on our auth and team service implementation. To make this repository a kinder open source place, we would need to make its dependencies more flexible. At minimum:
+
+- define swagger descriptions for both service dependencies
+- in the library, create interfaces for both the auth and the team service
+
+## Skoap
+
 Skoap implements an authentication proxy based on [Skipper](https://github.com/zalando/skipper).
 
 The main package provides a couple Skipper filters as a library, that can be used in any Skipper compilation.
