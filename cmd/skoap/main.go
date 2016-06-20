@@ -47,6 +47,8 @@ const (
 	tlsKeyFlag  = "tls-key"
 
 	verboseFlag = "v"
+
+	experimentalUpgradeFlag = "experimental-upgrade"
 )
 
 const (
@@ -109,6 +111,8 @@ be appended to this url, and the list of teams that the user is a member of will
 	keyPathTLSUsage  = "path of the key"
 
 	verboseUsage = `log level: Debug`
+
+	experimentalUpgradeUsage = "enable experimental feature to handle upgrade protocol requests"
 )
 
 type singleRouteClient eskip.Route
@@ -116,21 +120,22 @@ type singleRouteClient eskip.Route
 var fs *flag.FlagSet
 
 var (
-	address        string
-	targetAddress  string
-	preserveHeader bool
-	realm          string
-	scopes         string
-	teams          string
-	audit          bool
-	auditBody      int
-	routesFile     string
-	insecure       bool
-	authUrlBase    string
-	teamUrlBase    string
-	certPathTLS    string
-	keyPathTLS     string
-	verbose        bool
+	address             string
+	targetAddress       string
+	preserveHeader      bool
+	realm               string
+	scopes              string
+	teams               string
+	audit               bool
+	auditBody           int
+	routesFile          string
+	insecure            bool
+	authUrlBase         string
+	teamUrlBase         string
+	certPathTLS         string
+	keyPathTLS          string
+	verbose             bool
+	experimentalUpgrade bool
 )
 
 func (src *singleRouteClient) LoadAll() ([]*eskip.Route, error) {
@@ -165,6 +170,7 @@ func init() {
 	fs.StringVar(&certPathTLS, tlsCertFlag, "", certPathTLSUsage)
 	fs.StringVar(&keyPathTLS, tlsKeyFlag, "", keyPathTLSUsage)
 	fs.BoolVar(&verbose, verboseFlag, false, verboseUsage)
+	fs.BoolVar(&experimentalUpgrade, experimentalUpgradeFlag, false, experimentalUpgradeUsage)
 
 	err := fs.Parse(os.Args[1:])
 	if err != nil {
@@ -227,10 +233,11 @@ func main() {
 			skoap.NewAuthTeam(authUrlBase, teamUrlBase),
 			skoap.NewBasicAuth(),
 			skoap.NewAuditLog(os.Stderr)},
-		AccessLogDisabled: true,
-		ProxyOptions:      proxy.OptionsPreserveOriginal,
-		CertPathTLS:       certPathTLS,
-		KeyPathTLS:        keyPathTLS,
+		AccessLogDisabled:   true,
+		ProxyOptions:        proxy.OptionsPreserveOriginal,
+		CertPathTLS:         certPathTLS,
+		KeyPathTLS:          keyPathTLS,
+		ExperimentalUpgrade: experimentalUpgrade,
 	}
 
 	if insecure {
