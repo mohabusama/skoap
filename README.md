@@ -229,3 +229,29 @@ distribution):
 ```
 eskip check example.eskip
 ```
+
+### Secure Elasticsearch example
+
+Assuming we have a private Elasticsearch cluster and we want to expose it with an extra layer of oauth2 security.
+
+The following ``eskip`` routes file would allow only ``GET`` & ``POST`` HTTP methods while authenticating the request using ``auth`` filter.
+
+```
+esget:
+    PathRegexp("/es/.*") && Method("GET")
+    -> auth()
+    -> modPath(/^\/es\/(.*)$/, "/$1")
+    -> "http://private-elasticsearch-cluster";
+
+espost:
+    PathRegexp("/es/.*") && Method("POST")
+    -> auth()
+    -> modPath(/^\/es\/(.*)$/, "/$1")
+    -> "http://private-elasticsearch-cluster";
+```
+
+Running Skoap with ``auth-url``
+
+```
+skoap -address :9090 -routes-file skoap.eskip -auth-url https://auth.example.org
+```
