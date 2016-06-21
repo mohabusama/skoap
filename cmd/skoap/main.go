@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.bus.zalan.do/aryszka/skoap"
+	"github.com/zalando-incubator/skoap"
 	"github.com/Sirupsen/logrus"
 	"github.com/zalando/skipper"
 	"github.com/zalando/skipper/eskip"

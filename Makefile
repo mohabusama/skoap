@@ -39,7 +39,7 @@ prepare:
 	@echo created ./build/ directories
 
 build.scmfile:
-	@echo '{"url": "git:git@github.bus.zalan.do:aryszka/skoap.git", "revision": "'$$(git rev-parse HEAD)'", "author": "'$$USER'", "status": "test"}'  > scm-source.json
+	@echo '{"url": "git:git@github.com:zalando-incubator/skoap.git", "revision": "'$$(git rev-parse HEAD)'", "author": "'$$USER'", "status": "test"}'  > scm-source.json
 	@echo "created scm-source.json"
 
 # release
